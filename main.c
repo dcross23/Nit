@@ -1,17 +1,16 @@
 #include <stdio.h>
 #include <stdlib.h> 
+#include <assert.h>
 #include <argp.h>
 
 #include "nit.h"
 
-struct arguments { };
-
+//Init command
+static char cmd_init_doc[] = {"Create an empty Nip repository"};
 static error_t
-parse_opt (int key, char *arg, struct argp_state *state)
-{
-	switch (key){
-		//"init" command
-		case 'i':
+parse_cmd_init(int key, char* arg, struct argp_state* state){
+	switch(key){
+		case ARGP_KEY_END:
 			nit_repo_t *nit_repo = nit_init();
 			if(nit_repo == NULL){
 				printf("No repo\n");			
@@ -22,11 +21,37 @@ parse_opt (int key, char *arg, struct argp_state *state)
 				printf("%d\n", nit_repo->config.filemode);	
 				printf("%d\n", nit_repo->config.bare);	
 			}
-			break;
+		break;
 		
+		default:
+			return ARGP_ERR_UNKNOWN;
+	}
+	return 0;
+}
+
+static struct argp_option cmd_init_options[] = {
+	{ 0 }
+};
+
+static struct argp cmd_init_argp = {
+	cmd_init_options, parse_cmd_init, 0, cmd_init_doc
+};
+
+void cmd_init(struct argp_state *state){
+	int argc = state->argc - state->next + 1;
+	char **argv = &state->argv[state->next - 1];
+	
+	argp_parse(&cmd_init_argp, argc, argv, ARGP_IN_ORDER, 0, 0);		
+}
+
+static error_t
+parse_cmds(int key, char *arg, struct argp_state *state)
+{
+	switch (key){
 		case ARGP_KEY_ARG:
-			if (state->arg_num > 1)
-				argp_usage (state);
+			assert(arg);
+			if(strcmp(arg, "init") == 0)
+				cmd_init(state);
 			break;
 
 		case ARGP_KEY_END:
@@ -41,23 +66,25 @@ parse_opt (int key, char *arg, struct argp_state *state)
 }
 
 
-
 const char *argp_program_version = "Nit 0.1";
 const char *argp_program_bug_address = "<>";
-static char doc[] = "Nip -- Very simple implementation of Git";	
+static char global_doc[] = 
+	"\nNip -- Very simple implementation of Git"
+	"\v"
+	"Supported commands:\n"
+	"   init        Create and empty Nip repository"	
+;	
 
-static struct argp_option options[] = {
-	{"init", 'i', 0, 0,  "Create an empty Nip repository" },
-	{"add" , 'a', 0, 0,  "Adds to staging area" },
+static struct argp_option global_options[] = {
 	{ 0 }
 };
 
-static struct argp argp = { options, parse_opt, 0, doc };	
+static struct argp cmds_argp = { global_options, parse_cmds, 0, global_doc };	
 
 
+//Main
 int main(int argc, char **argv){
 	
-	struct arguments args;
-	argp_parse(&argp, argc, argv, 0, 0, &args);
+	argp_parse(&cmds_argp, argc, argv, ARGP_IN_ORDER, 0, 0);
 	return EXIT_SUCCESS;
 }
