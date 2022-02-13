@@ -77,18 +77,23 @@ set_nit_repo_config(nit_config_t *nit_config, char *nitdir_path)
 
 
 /**
- * Try to get an existing nit repository in a given path.
+ * Try to get an existing nit repository in a given path searching recursively
+ *  through the parent directories.
  */
 nit_repo_t*
 get_nit_repo(char *worktree_path)
 {
 	char *nitdir_path = create_path(worktree_path, "/.nit");	
-
+	
 	if(!dir_exists(worktree_path))
 		return NULL;
 	
-	if(!dir_exists(nitdir_path))
-		return NULL;
+	if(!dir_exists(nitdir_path)){
+		if(strcmp(worktree_path, "/") == 0)
+			return NULL;
+		else
+			return get_nit_repo(get_parent_path(worktree_path));
+	}
 
 	nit_repo_t *nit_repo = malloc(sizeof(nit_repo_t));
 	if(nit_repo == NULL){
@@ -105,6 +110,144 @@ get_nit_repo(char *worktree_path)
 
 
 /**
+ * Creates an object of a specific type for a given repo
+ */
+nit_obj_t*
+create_nit_obj(nit_repo_t *repo, char *obj_path, char *type)
+{
+	nit_obj_t *obj = malloc(sizeof(nit_obj_t));
+	if(obj == NULL)
+		return NULL;
+
+	obj->repo = repo;
+	strcpy(obj->obj_path, obj_path);
+	strcpy(obj->type, type);
+	return obj;
+}
+
+
+/**
+ * Read a nit object
+ */
+nit_obj_t*
+read_nit_object(char *hash, nit_repo_t *repo)
+{
+	if(repo == NULL || strlen(hash) != 2*SHA256_DIGEST_LENGTH)
+		return NULL;
+
+	
+	char dir[3];
+	strncpy(dir, hash, 2);
+	char *obj_file = strdup(hash + 2);
+		
+	char dir_path[PATH_LIMIT];
+	strcpy(dir_path, repo->nitdir);
+	strcat(dir_path, "/objs/");
+	strcat(dir_path, dir);
+
+	char obj_path[PATH_LIMIT];
+	strcpy(obj_path, dir_path);
+	strcat(obj_path, "/");
+	strcat(obj_path, hash + 2);
+	
+	if(!dir_exists(dir_path))
+		return NULL;
+
+	if(!file_exists(obj_path))
+		return NULL;
+
+	
+	nit_obj_t *nit_obj = malloc(sizeof(nit_obj_t));
+	if(nit_obj == NULL)
+		return NULL;
+	
+	nit_obj->repo = repo;
+	strcpy(nit_obj->obj_path, obj_path);	
+		
+	FILE *file = fopen(obj_path, "rb");
+	if(file == NULL)
+		return NULL;
+	
+
+	fclose(file);
+	return NULL;	
+}
+
+
+/**
+ * Write a nit object
+ */
+char*
+write_nit_object(char *file, bool write, char *type, nit_repo_t *repo)
+{
+	if(file == NULL)
+		return NULL;
+
+	char obj_type[20] = "";
+	if(type == NULL)
+		strcpy(obj_type, "blob");
+	else
+		strcpy(obj_type, type);
+	
+
+	//Check if directoy where the object is going to be written has 
+	// been created
+	char aux_path[] = ".aux.aux";	
+	FILE *aux_fd = fopen(aux_path, "w");
+	FILE *file_fd = fopen(file, "r");
+	
+	if(aux_fd == NULL || file_fd == NULL)
+		return NULL;
+
+	//Create the objects header
+	char file_sz[40];
+	fseek(file_fd, 0, SEEK_END);
+	sprintf(file_sz,"%ld",ftell(file_fd));
+	fseek(file_fd, 0, SEEK_SET);
+
+	fprintf(aux_fd, "%s%c%s%c", obj_type, ' ', file_sz, '\0');
+
+	//Copy data for the header	
+	char c;
+	while ((c = fgetc(file_fd)) != EOF)
+      		fputc(c, aux_fd);		
+	
+	fclose(aux_fd);
+	fclose(file_fd);
+	
+	//Hash
+	uint8_t *hash;
+	sha256(aux_path, &hash);
+	
+	//Write	
+	if(write){
+		if(repo == NULL){
+			fprintf(stderr, "No repo founded\n");
+			return NULL;
+		}
+	
+		char dir[3] = "";
+		strncpy(dir, hash, 2);
+		char dir_path[PATH_LIMIT];
+		snprintf(dir_path, PATH_LIMIT, "%s/objs/%s", repo->nitdir,dir);
+		char obj_path[PATH_LIMIT];
+		snprintf(obj_path, PATH_LIMIT, "%s/%s", dir_path, hash + 2);
+		
+		if(!dir_exists(dir_path)){
+			create_dir(dir_path);
+		}
+	
+		if(Z_OK != compress_file(aux_path, obj_path))
+			return NULL; 	
+	}
+ 	remove(aux_path);
+	return hash;	
+}
+
+
+
+
+/**
  * Create an empty Nip repository
  */
 nit_repo_t* 
@@ -115,8 +258,10 @@ nit_init()
 		return NULL;		
 
 	nit_repo_t *nit_repo = get_nit_repo(worktree_path);
-	if(nit_repo != NULL)
+	if(nit_repo != NULL){
+		printf("Nit repository already created at %s\n", nit_repo->nitdir);
 		return nit_repo;
+	}
 	
 	//If does not exist, just create it
 	char *nitdir_path = create_path(worktree_path, "/.nit");	
@@ -175,8 +320,26 @@ nit_init()
 		fprintf(stderr, "ERROR: set_nit_repo_config. Cannot set nit repo configuration.\n");	
 		return NULL;					
 	}
-
+			
 	return nit_repo;
 }
 
 
+
+/**
+ * Calculates de hash ID for the file given as an arg, the type of object (default is blob) and 
+ *  writes it to the objs database of the repo (this last if optional)
+ */
+uint8_t* 
+nit_hash_object(nit_repo_t *repo, ho_args_t *args)
+{
+	if(args==NULL || args->file == NULL)
+		return NULL;
+
+	if(dir_exists(args->file)){
+		fprintf(stderr, "ERROR: cannot hash '%s', is a directory\n", args->file);
+		return NULL;
+	}
+		
+	return write_nit_object(args->file, args->write, args->type, repo);
+}

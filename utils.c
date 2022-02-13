@@ -24,23 +24,33 @@ create_path(char *path, char *subpath)
 	strcpy(dst, path);
 	strcat(dst, subpath);
 	return dst;
-}	
+}
 
 /**
- * Return 1 if directory exists, 0 if not, -1 if error.
+ * Returns the parent path of a given path.
+ */	
+char*
+get_parent_path(char *path){
+	if(strcmp(path, "/") == 0)
+		return NULL;
+	else{
+		char *parent = strdup(path);
+		strrchr(parent, '/')[0] = '\0';
+		return parent;
+	}
+}
+
+/**
+ * Return 1 if directory exists, 0 if not.
  */ 
 int
 dir_exists(char *path)
 {
-	DIR *dir = opendir(path);
-	if(dir != NULL){
-		closedir(dir);
+	struct stat sb;
+	if(stat(path, &sb) == 0 && S_ISDIR(sb.st_mode))
 		return 1;
-
-	}else if(ENOENT == errno)
-		return 0;
 	else
-		return -1;
+		return 0;
 }
 
 /**
@@ -142,11 +152,7 @@ compress_file(char *file_in_path, char *file_out_path)
 		return Z_ERRNO;
 
 
-	z_stream stream = {
-		.zalloc = Z_NULL, 
-		.zfree  = Z_NULL, 
-		.opaque = Z_NULL
-	};
+	z_stream stream = {Z_NULL, Z_NULL, Z_NULL};
 	int ret, flush;
 	unsigned int have;	
 	uint8_t in[COMPRESS_CHUNK];	
@@ -162,12 +168,9 @@ compress_file(char *file_in_path, char *file_out_path)
 			deflateEnd(&stream);
 			return Z_ERRNO;
 		}
-		
-		if(feof(fin))  flush = Z_FINISH;
-		else              flush = Z_NO_FLUSH;
-			
+	
+		flush = feof(fin) ? Z_FINISH : Z_NO_FLUSH;
 		stream.next_in = in;
-		
 		do{	
 			stream.avail_out = COMPRESS_CHUNK;
 			stream.next_out = out;
@@ -181,7 +184,7 @@ compress_file(char *file_in_path, char *file_out_path)
 				return Z_ERRNO;
 			}	
 		}while(stream.avail_out == 0);
-		assert(stream.avail_out == 0);
+		assert(stream.avail_in == 0);
 
 	}while(flush != Z_FINISH);
 	assert(ret == Z_STREAM_END);	
@@ -261,8 +264,5 @@ decompress_file(char *file_in_path, char *file_out_path)
 	else
 		return Z_DATA_ERROR;		
 }
-
-
-
 
 

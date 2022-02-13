@@ -26,6 +26,7 @@
 //Paths, files and directories
 int   get_actual_path(char *actual_path);
 char* create_path(char *path, char *subpath);
+char* get_parent_path(char *path);
 int   dir_exists(char *path);
 int   create_dir(char *path);
 int   file_exists(char *path);
