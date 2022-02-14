@@ -107,15 +107,65 @@ void cmd_hash_obj(struct argp_state *state){
 	ho_args_t arguments = {NULL, false, NULL};
 	argp_parse(&cmd_hash_obj_argp, argc, argv, 0, 0, &arguments);
 	
-	char actual_path[PATH_LIMIT];
-	get_actual_path(actual_path);
-	nit_repo_t *nit_repo = get_nit_repo(actual_path);
-	
-	uint8_t* ret = nit_hash_object(nit_repo, &arguments);	
-	if(ret != NULL)
-		printf("%s\n", ret);
+	uint8_t* ret = nit_hash_object(&arguments);	
+	if(ret != NULL) printf("%s\n", ret);
 }
 
+//Cat-file command
+static char cmd_cat_file_doc[] = {"Get content of repository objects"};
+
+static error_t
+parse_cmd_cat_file(int key, char* arg, struct argp_state* state){
+	cf_args_t *arguments = state->input;
+	
+	switch(key){
+		case 't':
+			arguments->print_type = true;
+		break;
+
+		case 'p':
+			arguments->print_content = true;
+		break;
+		
+			
+		case ARGP_KEY_ARG:
+			if (state->arg_num >= 1)
+				argp_usage (state);
+
+		     	arguments->hash = strdup(arg);
+		break;
+		
+		case ARGP_KEY_END:
+			if (state->arg_num < 1)
+        			argp_usage (state);
+		break;
+		
+		default:
+			return ARGP_ERR_UNKNOWN;
+	}
+	return 0;
+}
+
+static struct argp_option cmd_cat_file_options[] = {
+	{"type" , 't', 0, 0, "Show the object type instead of the content"},
+	{"print", 'p', 0, 0, "Show the content of the object (has priority)"},
+	{ 0 }
+};
+
+static char cmd_cat_file_args_doc[] = "OBJ";
+
+static struct argp cmd_cat_file_argp = {
+	cmd_cat_file_options, parse_cmd_cat_file, cmd_cat_file_args_doc, cmd_cat_file_doc
+};
+
+void cmd_cat_file(struct argp_state *state){
+	int argc = state->argc - state->next + 1;
+	char **argv = &state->argv[state->next - 1];
+	
+	cf_args_t arguments = {false, false};
+	argp_parse(&cmd_cat_file_argp, argc, argv, 0, 0, &arguments);
+	nit_cat_file(&arguments);	
+}
 
 
 //Global
@@ -129,7 +179,8 @@ parse_cmds(int key, char *arg, struct argp_state *state)
 				cmd_init(state);
 			else if(strcmp(arg, "hash-object") == 0)
 				cmd_hash_obj(state);
-			
+			else if(strcmp(arg, "cat-file") == 0)
+				cmd_cat_file(state);			
 			break;
 
 		case ARGP_KEY_END:

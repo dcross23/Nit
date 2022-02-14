@@ -130,13 +130,12 @@ create_nit_obj(nit_repo_t *repo, char *obj_path, char *type)
  * Read a nit object
  */
 nit_obj_t*
-read_nit_object(char *hash, nit_repo_t *repo)
+read_nit_object(char *hash, nit_repo_t *repo, bool print_type, bool print_content)
 {
-	if(repo == NULL || strlen(hash) != 2*SHA256_DIGEST_LENGTH)
+	if(repo == NULL || hash==NULL)
 		return NULL;
 
-	
-	char dir[3];
+	char dir[3] = "";
 	strncpy(dir, hash, 2);
 	char *obj_file = strdup(hash + 2);
 		
@@ -149,7 +148,7 @@ read_nit_object(char *hash, nit_repo_t *repo)
 	strcpy(obj_path, dir_path);
 	strcat(obj_path, "/");
 	strcat(obj_path, hash + 2);
-	
+
 	if(!dir_exists(dir_path))
 		return NULL;
 
@@ -163,14 +162,37 @@ read_nit_object(char *hash, nit_repo_t *repo)
 	
 	nit_obj->repo = repo;
 	strcpy(nit_obj->obj_path, obj_path);	
-		
-	FILE *file = fopen(obj_path, "rb");
-	if(file == NULL)
+
+	char aux_path[] = ".aux.aux";	
+	if(Z_OK != decompress_file(obj_path, aux_path))
+		return NULL; 	
+	
+	FILE *aux_fd = fopen(aux_path, "r");	
+	if(aux_fd == NULL)
 		return NULL;
 	
+	char c;
+	char obj_type[OBJ_TYPE_LEN];	
+	int idx = 0;
+	while ((c = fgetc(aux_fd)) != ' '){
+		obj_type[idx++] = c;
+	}
+	obj_type[idx] = '\0';
 
-	fclose(file);
-	return NULL;	
+	while ((c = fgetc(aux_fd)) != '\0') continue;
+
+	if(print_content){	
+		while ((c = fgetc(aux_fd)) != EOF){
+			printf("%c", c);
+		}
+		printf("\n");
+	}else{
+		if(print_type)
+			printf("%s\n", obj_type);
+	}
+	remove(aux_path);	
+	fclose(aux_fd);	
+	return nit_obj;	
 }
 
 
@@ -200,7 +222,7 @@ write_nit_object(char *file, bool write, char *type, nit_repo_t *repo)
 		return NULL;
 
 	//Create the objects header
-	char file_sz[40];
+	char file_sz[OBJ_SIZE_LEN];
 	fseek(file_fd, 0, SEEK_END);
 	sprintf(file_sz,"%ld",ftell(file_fd));
 	fseek(file_fd, 0, SEEK_SET);
@@ -331,7 +353,7 @@ nit_init()
  *  writes it to the objs database of the repo (this last if optional)
  */
 uint8_t* 
-nit_hash_object(nit_repo_t *repo, ho_args_t *args)
+nit_hash_object(ho_args_t *args)
 {
 	if(args==NULL || args->file == NULL)
 		return NULL;
@@ -340,6 +362,33 @@ nit_hash_object(nit_repo_t *repo, ho_args_t *args)
 		fprintf(stderr, "ERROR: cannot hash '%s', is a directory\n", args->file);
 		return NULL;
 	}
+
+	char actual_path[PATH_LIMIT];
+	get_actual_path(actual_path);
+	nit_repo_t *nit_repo = get_nit_repo(actual_path);
 		
-	return write_nit_object(args->file, args->write, args->type, repo);
+	return write_nit_object(args->file, args->write, args->type, nit_repo);
+}
+
+
+/**
+ * Get the content or type of an object given the hash and prints it via stdout
+ */ 
+void*
+nit_cat_file(cf_args_t *args)
+{
+	if(args==NULL || args->hash==NULL)
+		return NULL;
+	
+	if(!is_sha256_hash(args->hash))
+		return NULL;
+
+	char actual_path[PATH_LIMIT];
+	get_actual_path(actual_path);
+	nit_repo_t *nit_repo = get_nit_repo(actual_path);
+	nit_obj_t* obj = read_nit_object(args->hash, nit_repo, args->print_type, args->print_content);
+	if(obj == NULL)
+		return NULL;
+	
+	
 }

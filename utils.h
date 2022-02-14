@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <string.h>
 #include <dirent.h>
 #include <errno.h>
@@ -13,7 +14,7 @@
 #include <assert.h>
 #include <openssl/sha.h>
 #include <zlib.h>
-
+#include <regex.h>
 
 #define PATH_LIMIT 200
 #define CONF_LIMIT 100
@@ -35,7 +36,7 @@ int   create_file(char *path);
 
 //Encryption
 int sha256(char *file, unsigned char **sha256hash);
-
+bool is_sha256_hash(char *str);
 
 //Compression/Decompression
 //Based on example in: https://zlib.net/zpipe.c

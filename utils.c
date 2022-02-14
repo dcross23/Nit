@@ -30,7 +30,8 @@ create_path(char *path, char *subpath)
  * Returns the parent path of a given path.
  */	
 char*
-get_parent_path(char *path){
+get_parent_path(char *path)
+{
 	if(strcmp(path, "/") == 0)
 		return NULL;
 	else{
@@ -108,7 +109,8 @@ create_file(char *path)
  * Calculates sha256 hash of a given file.
  */ 
 int 
-sha256(char *file, unsigned char **sha256hash){
+sha256(char *file, unsigned char **sha256hash)
+{
 	size_t len;
 	unsigned char chunk[SHA256_DIGEST_LENGTH];	
 	unsigned char hash[SHA256_DIGEST_LENGTH]  = { 0 };
@@ -140,6 +142,29 @@ sha256(char *file, unsigned char **sha256hash){
 
 
 /**
+ * Check if a given string is a valid sha256 hash
+ */
+bool
+is_sha256_hash(char *str)
+{
+	if(str == NULL) return false;
+
+	regex_t regex; 
+	if(regcomp(&regex, "^[a-f0-9]{64}$", REG_EXTENDED) != 0){
+		return false;
+	}
+	
+	if(regexec(&regex, str, 0, NULL, 0) == 0){
+		regfree(&regex);
+		return true;
+	}else{	
+		regfree(&regex);
+		return false;
+	}
+}
+
+
+/**
  * Compress the file in into file out
  */
 int 
@@ -159,13 +184,18 @@ compress_file(char *file_in_path, char *file_out_path)
 	uint8_t out[COMPRESS_CHUNK];	
 
 	ret = deflateInit(&stream, Z_DEFAULT_COMPRESSION);	
-	if(ret != Z_OK)
+	if(ret != Z_OK){
+		fclose(fin);
+		fclose(fout);
 		return ret;
+	}
 
 	do{
 		stream.avail_in = fread(in, 1, COMPRESS_CHUNK, fin);
 		if(ferror(fin)){
 			deflateEnd(&stream);
+			fclose(fin);
+			fclose(fout);
 			return Z_ERRNO;
 		}
 	
@@ -181,6 +211,8 @@ compress_file(char *file_in_path, char *file_out_path)
 			have = COMPRESS_CHUNK - stream.avail_out;
 			if(fwrite(out, 1, have, fout) != have || ferror(fout)){
 				deflateEnd(&stream);
+				fclose(fin);
+				fclose(fout);
 				return Z_ERRNO;
 			}	
 		}while(stream.avail_out == 0);
@@ -190,6 +222,8 @@ compress_file(char *file_in_path, char *file_out_path)
 	assert(ret == Z_STREAM_END);	
 
 	deflateEnd(&stream);
+	fclose(fin);
+	fclose(fout);
 	return Z_OK;
 }
 
@@ -206,13 +240,12 @@ decompress_file(char *file_in_path, char *file_out_path)
 	if(fin == NULL || fout == NULL)
 		return Z_ERRNO;
 
-	z_stream stream = {
-		.zalloc = Z_NULL,
-		.zfree  = Z_NULL,
-		.opaque  = Z_NULL,
-		.avail_in = 0,
-		.next_in = Z_NULL	
-	};	
+	z_stream stream; 
+	stream.zalloc = Z_NULL;
+	stream.zfree  = Z_NULL;
+	stream.opaque  = Z_NULL;
+	stream.avail_in = 0;
+	stream.next_in = Z_NULL;	
 		
 	int ret;
 	unsigned int have;	
@@ -220,13 +253,18 @@ decompress_file(char *file_in_path, char *file_out_path)
 	uint8_t out[COMPRESS_CHUNK];	
 
 	ret = inflateInit(&stream);
-	if(ret != Z_OK)
+	if(ret != Z_OK){
+		fclose(fin);
+		fclose(fout);
 		return ret;
+	}
 
 	do{
 		stream.avail_in = fread(in, 1, COMPRESS_CHUNK, fin);
 		if(ferror(fin)){
 			inflateEnd(&stream);
+			fclose(fin);
+			fclose(fout);
 			return Z_ERRNO;
 		}
 
@@ -247,18 +285,24 @@ decompress_file(char *file_in_path, char *file_out_path)
 				case Z_DATA_ERROR:
 				case Z_MEM_ERROR:
 					inflateEnd(&stream);
+					fclose(fin);
+					fclose(fout);
 					return ret;
 			}
 
 			have = COMPRESS_CHUNK - stream.avail_out;
 			if(fwrite(out, 1, have, fout) != have || ferror(fout)){
 				inflateEnd(&stream);
+				fclose(fin);
+				fclose(fout);
 				return Z_ERRNO;
 			}
 		}while(stream.avail_out == 0);		
 	}while(ret != Z_STREAM_END);
 
 	inflateEnd(&stream);
+	fclose(fin);
+	fclose(fout);
 	if(ret == Z_STREAM_END)
 		return Z_OK;
 	else
