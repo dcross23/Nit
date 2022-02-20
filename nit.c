@@ -113,7 +113,7 @@ get_nit_repo(char *worktree_path)
  * Creates an object of a specific type for a given repo
  */
 nit_obj_t*
-create_nit_obj(nit_repo_t *repo, char *obj_path, char *type)
+create_nit_obj(nit_repo_t *repo, char *obj_path)
 {
 	nit_obj_t *obj = malloc(sizeof(nit_obj_t));
 	if(obj == NULL)
@@ -121,7 +121,6 @@ create_nit_obj(nit_repo_t *repo, char *obj_path, char *type)
 
 	obj->repo = repo;
 	strcpy(obj->obj_path, obj_path);
-	strcpy(obj->type, type);
 	return obj;
 }
 
@@ -130,7 +129,7 @@ create_nit_obj(nit_repo_t *repo, char *obj_path, char *type)
  * Read a nit object
  */
 nit_obj_t*
-read_nit_object(char *hash, nit_repo_t *repo, bool print_type, bool print_content)
+read_nit_object(char *hash, nit_repo_t *repo)
 {
 	if(repo == NULL || hash==NULL)
 		return NULL;
@@ -155,44 +154,7 @@ read_nit_object(char *hash, nit_repo_t *repo, bool print_type, bool print_conten
 	if(!file_exists(obj_path))
 		return NULL;
 
-	
-	nit_obj_t *nit_obj = malloc(sizeof(nit_obj_t));
-	if(nit_obj == NULL)
-		return NULL;
-	
-	nit_obj->repo = repo;
-	strcpy(nit_obj->obj_path, obj_path);	
-
-	char aux_path[] = ".aux.aux";	
-	if(Z_OK != decompress_file(obj_path, aux_path))
-		return NULL; 	
-	
-	FILE *aux_fd = fopen(aux_path, "r");	
-	if(aux_fd == NULL)
-		return NULL;
-	
-	char c;
-	char obj_type[OBJ_TYPE_LEN];	
-	int idx = 0;
-	while ((c = fgetc(aux_fd)) != ' '){
-		obj_type[idx++] = c;
-	}
-	obj_type[idx] = '\0';
-
-	while ((c = fgetc(aux_fd)) != '\0') continue;
-
-	if(print_content){	
-		while ((c = fgetc(aux_fd)) != EOF){
-			printf("%c", c);
-		}
-		printf("\n");
-	}else{
-		if(print_type)
-			printf("%s\n", obj_type);
-	}
-	remove(aux_path);	
-	fclose(aux_fd);	
-	return nit_obj;	
+	return create_nit_obj(repo, obj_path);	
 }
 
 
@@ -386,9 +348,39 @@ nit_cat_file(cf_args_t *args)
 	char actual_path[PATH_LIMIT];
 	get_actual_path(actual_path);
 	nit_repo_t *nit_repo = get_nit_repo(actual_path);
-	nit_obj_t* obj = read_nit_object(args->hash, nit_repo, args->print_type, args->print_content);
+	nit_obj_t* obj = read_nit_object(args->hash, nit_repo);
 	if(obj == NULL)
 		return NULL;
+
+	char aux_path[] = ".aux.aux";	
+	if(Z_OK != decompress_file(obj->obj_path, aux_path))
+		return NULL; 	
 	
+	FILE *aux_fd = fopen(aux_path, "r");	
+	if(aux_fd == NULL)
+		return NULL;
 	
+	char c;
+	char obj_type[OBJ_TYPE_LEN];	
+	int idx = 0;
+	while ((c = fgetc(aux_fd)) != ' '){
+		obj_type[idx++] = c;
+	}
+	obj_type[idx] = '\0';
+
+	//Discard size, we dont care
+	while ((c = fgetc(aux_fd)) != '\0') continue;
+
+	if(args->print_content){	
+		while ((c = fgetc(aux_fd)) != EOF){
+			printf("%c", c);
+		}
+		fprintf(stdout, "\n");
+	
+	}else if(args->print_type){
+		fprintf(stdout, "%s\n", obj_type);
+	}
+
+	remove(aux_path);	
+	fclose(aux_fd);		
 }

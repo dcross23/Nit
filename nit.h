@@ -27,10 +27,7 @@ typedef struct nit_repo{
 typedef struct nit_obj{
 	nit_repo_t *repo;
 	char obj_path[PATH_LIMIT];
-	char type[OBJ_TYPE_LEN];
-	//TODO: char *data;
 }nit_obj_t;
-//TODO: refactor nit_obj_t to add file data as a string in the struct
 
 
 //Command args
